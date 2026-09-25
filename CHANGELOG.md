@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-25
+
 ### Added
 
 - **The Rust stack was rendering dark, and now it bills.** The exchange arrives as a first-class Rust citizen: a `tracing_subscriber::Layer` that rolls the fill dice on every event and, on a hit, books an impression and emits a host-read placement into the same log stream. Activation is opt-in by construction, since Rust will not let us hijack your `println!`, so buyers add `sponsored_logs::layer()` to their subscriber and turn the exchange on themselves. Consent is our moat, now enforced by the borrow checker
@@ -23,4 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Banner inventory now lands above-the-fold, not mid-record.** A banner is display art, but it was being emitted as a structured event, so the event level and target crowded onto its top border and a trailing `sponsored=true` field hung off the bottom-right corner. Banners now emit on their own path, framed by blank lines so the top border starts at column zero and nothing is appended after the closing corner; the classic single-line placement is unchanged and keeps its structured field. The frame ships to the buyer exactly as trafficked
+- **Banner inventory now lands above-the-fold, not mid-record.** A banner is display art, but it was being emitted as a structured event, so the event level and target crowded onto its top border and a trailing `sponsored=true` field hung off the bottom-right corner. Banners now emit on their own path, framed by blank lines so the top border starts at column zero and nothing is appended after the closing corner; the classic single-line placement is unchanged and keeps its structured field. The frame ships to the buyer exactly as trafficked ([#3](https://github.com/sponsoredlogs/sponsored-logs-rs/pull/3))
+
+[Unreleased]: https://github.com/sponsoredlogs/sponsored-logs-rs/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sponsoredlogs/sponsored-logs-rs/releases/tag/v0.1.0
