@@ -10,13 +10,26 @@
 //! inventory is visible in a short run. In production the default 1-in-1000 is
 //! brand-safe and respects the user experience while we scale.
 
-use sponsored_logs::{layer_with, Config, Selection};
+use sponsored_logs::{layer_with, Ad, Box, Config, Selection};
 use tracing_subscriber::prelude::*;
 
 fn main() {
+    // A book with one premium banner creative so the above-the-fold inventory is
+    // visible in a short run.
+    let mut ads = sponsored_logs::advertisers::default_pool();
+    ads.push(
+        Ad::new(
+            "Contoso Cloud: graduate a single log line into an above-the-fold impression unit.",
+            4,
+            30.0,
+        )
+        .banner(Box::Double),
+    );
+
     let exchange = layer_with(Config {
         probability: 0.3,
         selection: Selection::Cpm,
+        ads,
         ..Default::default()
     });
 

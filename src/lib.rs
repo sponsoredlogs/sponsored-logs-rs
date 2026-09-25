@@ -29,10 +29,12 @@
 //! ```
 
 pub mod advertisers;
+pub mod banner;
+pub mod env;
 mod layer;
 pub mod ledger;
 
-pub use advertisers::Ad;
+pub use advertisers::{Ad, Box, Format};
 pub use layer::SponsoredLayer;
 pub use ledger::{AdReport, Ledger, Report};
 
@@ -49,6 +51,17 @@ pub enum Selection {
     Cpm,
 }
 
+impl Selection {
+    /// Parse a raw env string. Unrecognized values settle to `Weight`, because
+    /// fill rate is king.
+    pub fn from_env_str(value: &str) -> Selection {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "cpm" => Selection::Cpm,
+            _ => Selection::Weight,
+        }
+    }
+}
+
 /// Enterprise-grade, self-serve campaign controls.
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -60,6 +73,8 @@ pub struct Config {
     pub selection: Selection,
     /// Tag prepended to each message. Blank omits it.
     pub ad_prefix: String,
+    /// Force portable `+`/`-`/`|` banner borders for legacy sinks.
+    pub ascii_only: bool,
 }
 
 impl Default for Config {
@@ -69,6 +84,7 @@ impl Default for Config {
             ads: advertisers::default_pool(),
             selection: Selection::Weight,
             ad_prefix: "[AD]".to_string(),
+            ascii_only: false,
         }
     }
 }
@@ -84,12 +100,31 @@ pub fn layer_with(config: Config) -> SponsoredLayer {
     SponsoredLayer::new(config)
 }
 
-/// Format one placement line, with the configured prefix.
-pub(crate) fn render(ad: &Ad, prefix: &str) -> String {
-    if prefix.is_empty() {
-        ad.text.clone()
-    } else {
-        format!("{} {}", prefix, ad.text)
+/// Build the exchange from `SPONSORED_LOGS_*` environment overrides. The layer
+/// is returned already active if `SPONSORED_LOGS` is truthy, or resident but
+/// inert otherwise, so you can add it unconditionally and let the environment
+/// decide whether to monetize.
+pub fn layer_from_env() -> SponsoredLayer {
+    let layer = SponsoredLayer::new(env::config());
+    if !env::activate() {
+        layer.unsponsor();
+    }
+    layer
+}
+
+/// Format one placement, with the configured prefix. A `Line` creative renders
+/// as the classic tagged line; a `Banner` graduates into an above-the-fold
+/// box-drawn unit at its bought impact tier.
+pub(crate) fn render(ad: &Ad, prefix: &str, ascii_only: bool) -> String {
+    match ad.format {
+        Format::Banner => banner::render(&ad.text, prefix, ad.box_tier, ascii_only),
+        Format::Line => {
+            if prefix.is_empty() {
+                ad.text.clone()
+            } else {
+                format!("{} {}", prefix, ad.text)
+            }
+        }
     }
 }
 
@@ -137,13 +172,21 @@ mod tests {
     #[test]
     fn render_includes_prefix() {
         let ad = Ad::new("Contoso", 1, 22.0);
-        assert_eq!(render(&ad, "[AD]"), "[AD] Contoso");
+        assert_eq!(render(&ad, "[AD]", false), "[AD] Contoso");
     }
 
     #[test]
     fn render_omits_blank_prefix() {
         let ad = Ad::new("Contoso", 1, 22.0);
-        assert_eq!(render(&ad, ""), "Contoso");
+        assert_eq!(render(&ad, "", false), "Contoso");
+    }
+
+    #[test]
+    fn render_draws_a_banner_for_banner_format() {
+        let ad = Ad::new("Own the viewport.", 1, 0.0).banner(Box::Double);
+        let out = render(&ad, "[AD]", false);
+        assert!(out.starts_with("╔═ [AD] "));
+        assert!(out.contains("Own the viewport."));
     }
 
     #[test]
