@@ -30,11 +30,13 @@
 
 pub mod advertisers;
 pub mod banner;
+pub mod color;
 pub mod env;
 mod layer;
 pub mod ledger;
 
 pub use advertisers::{Ad, Box, Format};
+pub use color::Color;
 pub use layer::SponsoredLayer;
 pub use ledger::{AdReport, Ledger, Report};
 
@@ -75,6 +77,8 @@ pub struct Config {
     pub ad_prefix: String,
     /// Force portable `+`/`-`/`|` banner borders for legacy sinks.
     pub ascii_only: bool,
+    /// When to gild the `[AD]` tag in premium gold.
+    pub color: Color,
 }
 
 impl Default for Config {
@@ -85,6 +89,7 @@ impl Default for Config {
             selection: Selection::Weight,
             ad_prefix: "[AD]".to_string(),
             ascii_only: false,
+            color: Color::Auto,
         }
     }
 }
@@ -114,15 +119,16 @@ pub fn layer_from_env() -> SponsoredLayer {
 
 /// Format one placement, with the configured prefix. A `Line` creative renders
 /// as the classic tagged line; a `Banner` graduates into an above-the-fold
-/// box-drawn unit at its bought impact tier.
-pub(crate) fn render(ad: &Ad, prefix: &str, ascii_only: bool) -> String {
+/// box-drawn unit at its bought impact tier. When `gild` is set, the `[AD]` tag
+/// is wrapped in zero-width gold so the visible column count is unchanged.
+pub(crate) fn render(ad: &Ad, prefix: &str, ascii_only: bool, gild: bool) -> String {
     match ad.format {
-        Format::Banner => banner::render(&ad.text, prefix, ad.box_tier, ascii_only),
+        Format::Banner => banner::render(&ad.text, prefix, ad.box_tier, ascii_only, gild),
         Format::Line => {
             if prefix.is_empty() {
                 ad.text.clone()
             } else {
-                format!("{} {}", prefix, ad.text)
+                format!("{} {}", color::colorize(prefix, gild), ad.text)
             }
         }
     }
@@ -172,19 +178,26 @@ mod tests {
     #[test]
     fn render_includes_prefix() {
         let ad = Ad::new("Contoso", 1, 22.0);
-        assert_eq!(render(&ad, "[AD]", false), "[AD] Contoso");
+        assert_eq!(render(&ad, "[AD]", false, false), "[AD] Contoso");
     }
 
     #[test]
     fn render_omits_blank_prefix() {
         let ad = Ad::new("Contoso", 1, 22.0);
-        assert_eq!(render(&ad, "", false), "Contoso");
+        assert_eq!(render(&ad, "", false, false), "Contoso");
+    }
+
+    #[test]
+    fn render_gilds_the_line_prefix_when_asked() {
+        let ad = Ad::new("Contoso", 1, 22.0);
+        let out = render(&ad, "[AD]", false, true);
+        assert_eq!(out, "\x1b[38;5;214m[AD]\x1b[0m Contoso");
     }
 
     #[test]
     fn render_draws_a_banner_for_banner_format() {
         let ad = Ad::new("Own the viewport.", 1, 0.0).banner(Box::Double);
-        let out = render(&ad, "[AD]", false);
+        let out = render(&ad, "[AD]", false, false);
         assert!(out.starts_with("╔═ [AD] "));
         assert!(out.contains("Own the viewport."));
     }

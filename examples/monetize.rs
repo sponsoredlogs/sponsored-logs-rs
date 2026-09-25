@@ -30,6 +30,10 @@ fn main() {
         probability: 0.3,
         selection: Selection::Cpm,
         ads,
+        // Force gold so the gilded [AD] tag is visible even when this example's
+        // output is piped. In production the default Color::Auto gilds only on a
+        // real TTY with NO_COLOR unset.
+        color: sponsored_logs::Color::Always,
         ..Default::default()
     });
 

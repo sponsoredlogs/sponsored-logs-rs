@@ -27,13 +27,15 @@ fn glyphs(tier: Box, ascii_only: bool) -> [&'static str; 6] {
 
 /// Draw the frame for one creative. `ascii_only` overrides whatever impact tier
 /// was purchased with the plain fallback set. The prefix is promoted into the
-/// top border as a masthead; a blank prefix collapses to a solid rule.
-pub fn render(text: &str, prefix: &str, tier: Box, ascii_only: bool) -> String {
+/// top border as a masthead; a blank prefix collapses to a solid rule. When
+/// `gild` is set, the masthead prefix is wrapped in zero-width gold, computed
+/// after the fill math so the border stays pixel-aligned.
+pub fn render(text: &str, prefix: &str, tier: Box, ascii_only: bool, gild: bool) -> String {
     let [top, top_r, bot, bot_r, horiz, vert] = glyphs(tier, ascii_only);
     let span = WIDTH + 2;
 
     let mut out = String::new();
-    out.push_str(&top_border(prefix, top, top_r, horiz, span));
+    out.push_str(&top_border(prefix, top, top_r, horiz, span, gild));
     for line in wrap_text(text, WIDTH) {
         out.push('\n');
         out.push_str(&format!("{vert} {:<width$} {vert}", line, width = WIDTH));
@@ -44,15 +46,24 @@ pub fn render(text: &str, prefix: &str, tier: Box, ascii_only: bool) -> String {
 }
 
 /// Top border with the prefix embedded as `<h> [AD] <h-fill>`. A blank prefix
-/// collapses to a solid rule with no gap and no tag.
-fn top_border(prefix: &str, corner: &str, corner_r: &str, horiz: &str, span: usize) -> String {
+/// collapses to a solid rule with no gap and no tag. The fill count is computed
+/// against the PLAIN prefix, then the gilded tag is swapped in, since ANSI
+/// escapes are zero-width and must not shift the border count.
+fn top_border(
+    prefix: &str,
+    corner: &str,
+    corner_r: &str,
+    horiz: &str,
+    span: usize,
+    gild: bool,
+) -> String {
     if prefix.is_empty() {
         return format!("{corner}{}{corner_r}", horiz.repeat(span));
     }
-    let tag = format!(" {prefix} ");
-    let tag_cols = tag.chars().count();
+    let tag_cols = prefix.chars().count() + 2; // one space either side
     let fill = span.saturating_sub(1 + tag_cols);
-    format!("{corner}{horiz}{tag}{}{corner_r}", horiz.repeat(fill))
+    let gilded = crate::color::colorize(prefix, gild);
+    format!("{corner}{horiz} {gilded} {}{corner_r}", horiz.repeat(fill))
 }
 
 /// Word-wrap text to `width` columns, breaking a single word longer than the
@@ -103,7 +114,7 @@ mod tests {
 
     #[test]
     fn renders_a_double_banner_with_masthead() {
-        let out = render("Own the viewport.", "[AD]", Box::Double, false);
+        let out = render("Own the viewport.", "[AD]", Box::Double, false, false);
         let lines: Vec<&str> = out.lines().collect();
         assert!(
             lines[0].starts_with("╔═ [AD] "),
@@ -121,6 +132,7 @@ mod tests {
             "[AD]",
             Box::Light,
             false,
+            false,
         );
         let widths: Vec<usize> = out.lines().map(|l| l.chars().count()).collect();
         assert!(
@@ -131,14 +143,30 @@ mod tests {
 
     #[test]
     fn ascii_only_uses_portable_glyphs() {
-        let out = render("legacy sink", "[AD]", Box::Double, true);
+        let out = render("legacy sink", "[AD]", Box::Double, true, false);
         assert!(out.contains('+') && out.contains('|') && out.contains('-'));
         assert!(!out.contains('╔'), "no box-drawing when ascii_only");
     }
 
     #[test]
+    fn gilded_masthead_keeps_the_border_aligned() {
+        // The gold escapes are zero-width, so the gilded top border must be the
+        // same visible width as the plain one.
+        let plain = render("aligned?", "[AD]", Box::Double, false, false);
+        let gold = render("aligned?", "[AD]", Box::Double, false, true);
+        assert!(gold.contains("\x1b[38;5;214m"), "masthead is gilded");
+
+        let strip = |s: &str| s.replace("\x1b[38;5;214m", "").replace("\x1b[0m", "");
+        assert_eq!(
+            strip(&gold),
+            plain,
+            "stripped of escapes, the gilded frame is byte-identical"
+        );
+    }
+
+    #[test]
     fn blank_prefix_collapses_to_a_solid_rule() {
-        let out = render("no tag", "", Box::Light, false);
+        let out = render("no tag", "", Box::Light, false, false);
         let top = out.lines().next().unwrap();
         assert!(!top.contains("[AD]"));
         assert!(top.starts_with('┌') && top.ends_with('┐'));

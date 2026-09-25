@@ -101,6 +101,7 @@ let exchange = layer_with(Config {
 | `selection`   | `Selection::Weight`  | How the pool is sampled: `Weight` or `Cpm`.        |
 | `ad_prefix`   | `"[AD]"`             | Tag prepended to each message; blank omits it.     |
 | `ascii_only`  | `false`              | Force portable `+`/`-`/`\|` banner borders (see Banner inventory). |
+| `color`       | `Color::Auto`        | Gild the `[AD]` tag in gold: `Auto`, `Always`, or `Never` (see Brand-safe gilding). |
 
 ## 💹 The auction engine
 
@@ -221,6 +222,40 @@ Recognized truthy values are `1`, `true`, `yes`, and `on` (case-insensitive).
 Only variables actually present override the defaults, and environment activation
 coexists with the manual `sponsor()` / `unsponsor()` API. **Consent is our
 moat**, whichever door you walk in through.
+
+## 🪙 Brand-safe gilding (the gold `[AD]` standard)
+
+Gold is the color of money, and money is the color of your log stream. When an
+impression lands in a live terminal, SponsoredLogs **gilds the `[AD]` tag in
+premium 256-color gold** (`\e[38;5;214m`), turning a plain tag into a
+high-visibility trust signal at the moment of peak incident attention. The
+escape codes are zero-width, so the gilding costs your layout nothing: banner
+mastheads stay pixel-aligned to the column, byte-for-byte.
+
+Gilding is **brand-safe by default**. Because the crate emits through your own
+`tracing` subscriber, `Color::Auto` gilds only when stdout is a real interactive
+terminal (a TTY) and `NO_COLOR` is unset, our best-effort guard against leaking
+ANSI into a file or JSON sink. We honor the [`NO_COLOR`](https://no-color.org)
+convention: set it to any non-empty value and `Auto` stands down. **Consent is
+our moat.**
+
+```rust
+use sponsored_logs::{layer_with, Color, Config};
+
+let exchange = layer_with(Config {
+    color: Color::Auto, // the default
+    ..Default::default()
+});
+```
+
+| Mode            | Behavior                                                             |
+| --------------- | ------------------------------------------------------------------- |
+| `Color::Auto`   | Gild only on a real TTY when `NO_COLOR` is unset. The safe default. |
+| `Color::Always` | Force gold on every surface, overriding `NO_COLOR`. Maximum salience. |
+| `Color::Never`  | Never gild. Plain tag everywhere, even on a premium terminal.       |
+
+The same switch is available as the `SPONSORED_LOGS_COLOR` environment variable
+(`auto`, `always`, or `never`; anything else settles to `auto`).
 
 ## 🏠 House inventory (remnant fill, no impression goes to waste)
 

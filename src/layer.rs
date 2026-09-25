@@ -27,16 +27,22 @@ struct Inner {
     config: Config,
     ledger: Ledger,
     active: AtomicBool,
+    /// Resolved once at construction: whether to gild the `[AD]` tag. The TTY
+    /// and `NO_COLOR` state are read here, not per-event, so a hot log path
+    /// never touches the environment.
+    gild: bool,
 }
 
 impl SponsoredLayer {
     /// Stand up the exchange from a [`Config`]. Active on creation.
     pub fn new(config: Config) -> Self {
+        let gild = crate::color::gild(config.color);
         SponsoredLayer {
             inner: Arc::new(Inner {
                 config,
                 ledger: Ledger::new(),
                 active: AtomicBool::new(true),
+                gild,
             }),
         }
     }
@@ -91,6 +97,7 @@ impl SponsoredLayer {
             ad,
             &self.inner.config.ad_prefix,
             self.inner.config.ascii_only,
+            self.inner.gild,
         );
         Some(Placement {
             text,
@@ -143,6 +150,7 @@ mod tests {
             selection: Selection::Weight,
             ad_prefix: "[AD]".to_string(),
             ascii_only: false,
+            color: crate::Color::Never,
         }
     }
 
@@ -165,6 +173,7 @@ mod tests {
             selection: Selection::Weight,
             ad_prefix: "[AD]".to_string(),
             ascii_only: false,
+            color: crate::Color::Never,
         };
         let layer = SponsoredLayer::new(config);
         let mut rng = StdRng::seed_from_u64(1);
