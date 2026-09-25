@@ -72,9 +72,9 @@ impl SponsoredLayer {
     }
 
     /// The core auction. Rolls the fill dice; on a hit books an impression and
-    /// returns the rendered placement line. Separated from the tracing plumbing
+    /// returns the rendered [`Placement`]. Separated from the tracing plumbing
     /// so it can be tested without a subscriber.
-    fn maybe_fill<R: Rng + ?Sized>(&self, rng: &mut R) -> Option<String> {
+    fn maybe_fill<R: Rng + ?Sized>(&self, rng: &mut R) -> Option<Placement> {
         if !self.active() {
             return None;
         }
@@ -87,22 +87,43 @@ impl SponsoredLayer {
         // Stage two: which creative fills the slot.
         let ad = pick(&self.inner.config.ads, self.inner.config.selection, rng)?;
         self.inner.ledger.record(ad);
-        Some(render(
+        let text = render(
             ad,
             &self.inner.config.ad_prefix,
             self.inner.config.ascii_only,
-        ))
+        );
+        Some(Placement {
+            text,
+            is_banner: ad.format == crate::Format::Banner,
+        })
     }
+}
+
+/// One rendered placement, plus whether it is a multi-line banner unit. Banners
+/// need a different emit path so the frame does not sit inside event chrome.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Placement {
+    text: String,
+    is_banner: bool,
 }
 
 impl<S: Subscriber> Layer<S> for SponsoredLayer {
     fn on_event(&self, _event: &Event<'_>, _ctx: Context<'_, S>) {
         let mut rng = rand::thread_rng();
         if let Some(placement) = self.maybe_fill(&mut rng) {
-            // Emit the placement into the same stream, at the same level the
-            // audience is already reading, at their moment of peak attention.
-            //
-            tracing::info!(sponsored = true, "{placement}");
+            if placement.is_banner {
+                // A banner is above-the-fold art, not a structured record. Frame
+                // it with its own blank lines so the top border starts at column
+                // zero and nothing is appended after the bottom border, and drop
+                // the sponsored field that would trail the closing corner.
+                //
+                tracing::info!("\n{}\n", placement.text);
+            } else {
+                // A line placement is log-like: emit it as a structured event at
+                // the level the audience is already reading, at peak attention.
+                //
+                tracing::info!(sponsored = true, "{}", placement.text);
+            }
         }
     }
 }
@@ -129,9 +150,30 @@ mod tests {
     fn fills_and_books_when_probability_is_one() {
         let layer = SponsoredLayer::new(always_on_config());
         let mut rng = StdRng::seed_from_u64(1);
-        let placement = layer.maybe_fill(&mut rng);
-        assert_eq!(placement, Some("[AD] Contoso".to_string()));
+        let placement = layer.maybe_fill(&mut rng).expect("should fill");
+        assert_eq!(placement.text, "[AD] Contoso");
+        assert!(!placement.is_banner, "a line creative is not a banner");
         assert_eq!(layer.impressions(), 1);
+    }
+
+    #[test]
+    fn banner_creatives_are_flagged_for_the_banner_emit_path() {
+        use crate::Box;
+        let config = Config {
+            probability: 1.0,
+            ads: vec![Ad::new("Own the viewport.", 1, 0.0).banner(Box::Double)],
+            selection: Selection::Weight,
+            ad_prefix: "[AD]".to_string(),
+            ascii_only: false,
+        };
+        let layer = SponsoredLayer::new(config);
+        let mut rng = StdRng::seed_from_u64(1);
+        let placement = layer.maybe_fill(&mut rng).expect("should fill");
+        assert!(
+            placement.is_banner,
+            "a banner creative routes to the banner path"
+        );
+        assert!(placement.text.starts_with("╔═ [AD] "));
     }
 
     #[test]

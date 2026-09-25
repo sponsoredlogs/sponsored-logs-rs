@@ -19,3 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Stood up yield assurance so no bad placement ships.** A CI pipeline now audits every push and pull request before it can bill: `fmt` keeps the creative on-grid, `clippy` runs with warnings promoted to hard failures so brand safety is enforced not suggested, and the suite proves every impression is verified. Green means the inventory is cleared to sell ([#1](https://github.com/sponsoredlogs/sponsored-logs-rs/pull/1))
+
+### Fixed
+
+- **Banner inventory now lands above-the-fold, not mid-record.** A banner is display art, but it was being emitted as a structured event, so the event level and target crowded onto its top border and a trailing `sponsored=true` field hung off the bottom-right corner. Banners now emit on their own path, framed by blank lines so the top border starts at column zero and nothing is appended after the closing corner; the classic single-line placement is unchanged and keeps its structured field. The frame ships to the buyer exactly as trafficked
