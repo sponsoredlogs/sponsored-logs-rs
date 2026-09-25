@@ -4,7 +4,7 @@
 //! on `SPONSORED_LOGS_*` overrides. Environment activation and manual activation
 //! coexist: reading the env never replaces the [`crate::layer`] API.
 
-use crate::{Config, Selection};
+use crate::{Color, Config, Selection};
 
 /// Recognized truthy values for boolean env vars (case-insensitive).
 const TRUTHY: [&str; 4] = ["1", "true", "yes", "on"];
@@ -51,6 +51,9 @@ pub fn config_with(get: impl Fn(&str) -> Option<String>) -> Config {
     }
     if let Some(v) = get("SPONSORED_LOGS_ASCII_ONLY") {
         config.ascii_only = truthy(&v);
+    }
+    if let Some(v) = get("SPONSORED_LOGS_COLOR") {
+        config.color = Color::from_env_str(&v);
     }
 
     config
@@ -103,11 +106,13 @@ mod tests {
             ("SPONSORED_LOGS_PREFIX", "SPONSORED:"),
             ("SPONSORED_LOGS_SELECTION", "cpm"),
             ("SPONSORED_LOGS_ASCII_ONLY", "true"),
+            ("SPONSORED_LOGS_COLOR", "always"),
         ]));
         assert_eq!(config.probability, 0.25);
         assert_eq!(config.ad_prefix, "SPONSORED:");
         assert_eq!(config.selection, Selection::Cpm);
         assert!(config.ascii_only);
+        assert_eq!(config.color, Color::Always);
     }
 
     #[test]
