@@ -1,0 +1,41 @@
+# Yield assurance for the exchange: no placement ships unless the book balances.
+# fmt keeps the creative on-grid, clippy defends brand safety, the suite proves
+# every impression is verified, viewable, and fraud-free.
+#
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
+
+jobs:
+  audit:
+    name: Yield assurance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache the demand pool
+        uses: Swatinem/rust-cache@v2
+
+      - name: Keep the creative on-grid (fmt)
+        run: cargo fmt --all -- --check
+
+      - name: Defend brand safety (clippy)
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Verify every impression (test)
+        run: cargo test --all-targets
+
+      - name: Verify the doctests bill correctly
+        run: cargo test --doc
