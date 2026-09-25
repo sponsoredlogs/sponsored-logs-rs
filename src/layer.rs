@@ -102,35 +102,41 @@ impl SponsoredLayer {
         Some(Placement {
             text,
             is_banner: ad.format == crate::Format::Banner,
+            gilded: self.inner.gild,
         })
     }
 }
 
-/// One rendered placement, plus whether it is a multi-line banner unit. Banners
-/// need a different emit path so the frame does not sit inside event chrome.
+/// One rendered placement, plus whether it is a multi-line banner unit and
+/// whether it carries gilding. The emit path branches on both: a banner needs
+/// its own blank-line framing, and any gilded placement must travel as a
+/// `Display` field, since the fmt subscriber escapes control characters in the
+/// event message and would print our ANSI as the literal text `\x1b`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Placement {
     text: String,
     is_banner: bool,
+    gilded: bool,
 }
 
 impl<S: Subscriber> Layer<S> for SponsoredLayer {
     fn on_event(&self, _event: &Event<'_>, _ctx: Context<'_, S>) {
         let mut rng = rand::thread_rng();
-        if let Some(placement) = self.maybe_fill(&mut rng) {
-            if placement.is_banner {
-                // A banner is above-the-fold art, not a structured record. Frame
-                // it with its own blank lines so the top border starts at column
-                // zero and nothing is appended after the bottom border, and drop
-                // the sponsored field that would trail the closing corner.
-                //
-                tracing::info!("\n{}\n", placement.text);
-            } else {
-                // A line placement is log-like: emit it as a structured event at
-                // the level the audience is already reading, at peak attention.
-                //
-                tracing::info!(sponsored = true, "{}", placement.text);
-            }
+        let Some(placement) = self.maybe_fill(&mut rng) else {
+            return;
+        };
+
+        // Gilded placements carry raw ANSI, which the fmt subscriber escapes in
+        // the message but preserves in a Display field. So anything gilded is
+        // emitted as the `sponsored` field; plain placements keep the cleaner
+        // message path. Banners frame themselves with leading/trailing blank
+        // lines so the top border starts at column zero either way.
+        //
+        match (placement.is_banner, placement.gilded) {
+            (true, true) => tracing::info!(sponsored = %format!("\n{}\n", placement.text)),
+            (true, false) => tracing::info!("\n{}\n", placement.text),
+            (false, true) => tracing::info!(sponsored = %placement.text),
+            (false, false) => tracing::info!(sponsored = true, "{}", placement.text),
         }
     }
 }
@@ -161,7 +167,35 @@ mod tests {
         let placement = layer.maybe_fill(&mut rng).expect("should fill");
         assert_eq!(placement.text, "[AD] Contoso");
         assert!(!placement.is_banner, "a line creative is not a banner");
+        assert!(!placement.gilded, "Color::Never does not gild");
         assert_eq!(layer.impressions(), 1);
+    }
+
+    #[test]
+    fn gilded_placement_carries_a_real_escape_byte_and_is_flagged() {
+        // Regression: the fmt subscriber escapes control chars in the message,
+        // so a gilded ad must be flagged (to route through the Display field
+        // path) and must carry a real ESC byte, not the literal text "\x1b".
+        let config = Config {
+            probability: 1.0,
+            ads: vec![Ad::new("Contoso", 1, 22.0)],
+            selection: Selection::Weight,
+            ad_prefix: "[AD]".to_string(),
+            ascii_only: false,
+            color: crate::Color::Always,
+        };
+        let layer = SponsoredLayer::new(config);
+        let mut rng = StdRng::seed_from_u64(1);
+        let placement = layer.maybe_fill(&mut rng).expect("should fill");
+        assert!(placement.gilded, "Color::Always gilds");
+        assert!(
+            placement.text.contains('\u{1b}'),
+            "carries a real ESC byte, not the literal string backslash-x-1-b"
+        );
+        assert!(
+            !placement.text.contains("\\x1b"),
+            "must not contain the literal escape text"
+        );
     }
 
     #[test]
