@@ -5,6 +5,28 @@
 //! impressions). House ads bill at zero and self-promote the platform, because
 //! no impression goes to waste.
 
+/// The placement format an advertiser buys for a creative.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Format {
+    /// The classic single `[AD]` line. The entry-level SKU.
+    #[default]
+    Line,
+    /// A full box-drawn, above-the-fold banner unit. Own the viewport.
+    Banner,
+}
+
+/// The impact tier of a banner, priced by border weight.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Box {
+    /// `┌─ … ─┐` standard banner.
+    #[default]
+    Light,
+    /// `┏━ … ━┓` premium impact.
+    Heavy,
+    /// `╔═ … ═╗` maximum impact.
+    Double,
+}
+
 /// A single campaign creative in the demand pool.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Ad {
@@ -14,16 +36,29 @@ pub struct Ad {
     pub weight: u32,
     /// Cost per 1,000 impressions. Drives spend and `:cpm` selection.
     pub cpm: f64,
+    /// The placement format. Defaults to the classic `[AD]` line.
+    pub format: Format,
+    /// The banner impact tier. Only meaningful when `format` is `Banner`.
+    pub box_tier: Box,
 }
 
 impl Ad {
-    /// Traffic a new campaign creative into the pool.
+    /// Traffic a new line creative into the pool.
     pub fn new(text: impl Into<String>, weight: u32, cpm: f64) -> Self {
         Ad {
             text: text.into(),
             weight,
             cpm,
+            format: Format::Line,
+            box_tier: Box::default(),
         }
+    }
+
+    /// Graduate this creative into an above-the-fold banner at the given tier.
+    pub fn banner(mut self, tier: Box) -> Self {
+        self.format = Format::Banner;
+        self.box_tier = tier;
+        self
     }
 }
 
@@ -122,5 +157,13 @@ mod tests {
         assert_eq!(ad.text, "hi");
         assert_eq!(ad.weight, 2);
         assert_eq!(ad.cpm, 5.0);
+        assert_eq!(ad.format, Format::Line);
+    }
+
+    #[test]
+    fn banner_promotes_to_the_bought_tier() {
+        let ad = Ad::new("hi", 1, 0.0).banner(Box::Double);
+        assert_eq!(ad.format, Format::Banner);
+        assert_eq!(ad.box_tier, Box::Double);
     }
 }

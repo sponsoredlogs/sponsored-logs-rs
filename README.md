@@ -100,6 +100,7 @@ let exchange = layer_with(Config {
 | `ads`         | 13 (10 paid + 3 house) | The demand pool (see House inventory).           |
 | `selection`   | `Selection::Weight`  | How the pool is sampled: `Weight` or `Cpm`.        |
 | `ad_prefix`   | `"[AD]"`             | Tag prepended to each message; blank omits it.     |
+| `ascii_only`  | `false`              | Force portable `+`/`-`/`\|` banner borders (see Banner inventory). |
 
 ## 💹 The auction engine
 
@@ -133,6 +134,93 @@ let exchange = layer_with(Config {
     ..Default::default()
 });
 ```
+
+## 🖼️ Premium banner inventory (above-the-fold placements)
+
+The one-line placement was always the entry-level SKU. For advertisers ready to
+**own the viewport**, promote a creative to a banner and graduate a single log
+line into a full, box-drawn, above-the-fold impression unit. Your `ad_prefix` is
+promoted straight into the top border as a masthead:
+
+```rust
+use sponsored_logs::{Ad, Box};
+
+let creative = Ad::new(
+    "Brought to you by Contoso, the enterprise you invented for the demo.",
+    1,
+    22.0,
+).banner(Box::Double);
+```
+
+```
+╔═ [AD] ═══════════════════════════════════════════════════════╗
+║ Brought to you by Contoso, the enterprise you invented for   ║
+║ the demo.                                                    ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+**Impact tiers.** `Box` is the impact tier the advertiser buys, priced by border
+weight:
+
+| `Box`         | Frame               | Positioning      |
+| ------------- | ------------------- | ---------------- |
+| `Box::Light`  | `┌─ … ─┐` (default) | standard banner  |
+| `Box::Heavy`  | `┏━ … ━┓`           | premium impact   |
+| `Box::Double` | `╔═ … ═╗`           | maximum impact   |
+
+The body word-wraps to ~60 columns of premium column-inches; a single word too
+long for the frame breaks mid-word rather than overflow the inventory.
+
+**Universal compatibility (`ascii_only`).** Some downstream sinks are not yet
+ready for the box-drawing renaissance. Set `ascii_only` (in `Config` or via
+`SPONSORED_LOGS_ASCII_ONLY`) to render every tier with the portable
+`+`/`-`/`|` glyph set, guaranteeing **100% viewability across even the most
+legacy terminal**:
+
+```
++- [AD] -------------------------------------------------------+
+| Brought to you by Contoso, the enterprise you invented for   |
+| the demo.                                                    |
++--------------------------------------------------------------+
+```
+
+Banner inventory is optimized for standard-width Latin creative: the frame lays
+out the right border by character count. Ad copy featuring emoji, CJK glyphs, or
+combining marks renders **wider than one cell** and can nudge the border off its
+column, a known trade-off of premium, box-drawn placement, not a delivery
+failure. To keep every impression on-grid, submit standard-width Latin creative;
+the exchange delivers exactly what you traffic.
+
+## 🌐 Activation via the environment
+
+Set `SPONSORED_LOGS` to onboard at startup without changing code, then let the
+environment layer on overrides. Add [`layer_from_env`](https://docs.rs) to your
+subscriber unconditionally and the environment decides whether to monetize:
+
+```rust
+use tracing_subscriber::prelude::*;
+
+// Active if SPONSORED_LOGS is truthy, resident-but-inert otherwise.
+let exchange = sponsored_logs::layer_from_env();
+
+tracing_subscriber::registry()
+    .with(tracing_subscriber::fmt::layer())
+    .with(exchange)
+    .init();
+```
+
+```
+SPONSORED_LOGS=1
+SPONSORED_LOGS_PROBABILITY=0.01
+SPONSORED_LOGS_PREFIX=SPONSORED:
+SPONSORED_LOGS_SELECTION=cpm
+SPONSORED_LOGS_ASCII_ONLY=true
+```
+
+Recognized truthy values are `1`, `true`, `yes`, and `on` (case-insensitive).
+Only variables actually present override the defaults, and environment activation
+coexists with the manual `sponsor()` / `unsponsor()` API. **Consent is our
+moat**, whichever door you walk in through.
 
 ## 🏠 House inventory (remnant fill, no impression goes to waste)
 

@@ -87,7 +87,11 @@ impl SponsoredLayer {
         // Stage two: which creative fills the slot.
         let ad = pick(&self.inner.config.ads, self.inner.config.selection, rng)?;
         self.inner.ledger.record(ad);
-        Some(render(ad, &self.inner.config.ad_prefix))
+        Some(render(
+            ad,
+            &self.inner.config.ad_prefix,
+            self.inner.config.ascii_only,
+        ))
     }
 }
 
@@ -117,6 +121,7 @@ mod tests {
             ads: vec![Ad::new("Contoso", 1, 22.0)],
             selection: Selection::Weight,
             ad_prefix: "[AD]".to_string(),
+            ascii_only: false,
         }
     }
 
