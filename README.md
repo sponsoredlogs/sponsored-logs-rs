@@ -4,6 +4,8 @@
 
 > 💡 _"Every line you log is a line you're leaving on the table."_
 
+![SponsoredLogs filling inventory in a live tracing stream: gold-gilded [AD] line placements and a box-drawn banner unit.](docs/screenshot.png)
+
 For decades, application logs have been a **pure cost center**, emitted once,
 grepped never, archived into oblivion at enormous storage expense. Until now.
 **SponsoredLogs** transforms your `tracing` stream from a liability into a
